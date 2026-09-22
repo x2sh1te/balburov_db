@@ -1,11 +1,10 @@
--- 1. ОЧИСТКА БАЗЫ ДАННЫХ (Удаление в порядке от зависимых к независимым)
+
 DROP TABLE IF EXISTS parameters;
 DROP TABLE IF EXISTS batches;
 DROP TABLE IF EXISTS users;
 DROP TABLE IF EXISTS equipment_types;
 DROP TABLE IF EXISTS positions;
 
--- 2. СОЗДАНИЕ ТАБЛИЦ (В порядке от независимых к зависимым)
 CREATE TABLE positions (
     id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name VARCHAR(255) NOT NULL
@@ -39,7 +38,6 @@ CREATE TABLE parameters (
     FOREIGN KEY (batch_id) REFERENCES batches(id)
 );
 
--- 3. ЗАПОЛНЕНИЕ ТЕСТОВЫМИ ДАННЫМИ (DML)
 INSERT INTO positions (name) VALUES 
 ('Старший метеоролог'),
 ('Оператор-вычислитель');
@@ -53,8 +51,8 @@ INSERT INTO users (full_name, position_id) VALUES
 ('Петров П.П.', 2);
 
 INSERT INTO batches (user_id, equipment_type_id) VALUES 
-(1, 1), -- Иванов делает замер с ДМК
-(2, 2); -- Петров делает замер с ВР
+(1, 1), 
+(2, 2);
 
 INSERT INTO parameters (batch_id, name, value) VALUES 
 (1, 'Высота метеопоста', 100.00),
@@ -64,7 +62,6 @@ INSERT INTO parameters (batch_id, name, value) VALUES
 (2, 'Температура', -5.50),
 (2, 'Дальность сноса пуль', 45.00);
 
--- 4. ИТОГОВЫЙ SELECT ДЛЯ СКРИНШОТА (Объединение всех таблиц)
 SELECT 
     b.id AS "Код пачки",
     u.full_name AS "Сотрудник",
