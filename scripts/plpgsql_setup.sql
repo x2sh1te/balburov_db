@@ -35,7 +35,7 @@ DECLARE
     person_name TEXT;
 BEGIN
     INSERT INTO meteo_plpgsql.positions (name) VALUES ('Старший метеоролог'), ('Оператор-вычислитель');
-    INSERT INTO meteo_plpgsql.equipment_types (name) VALUES ('Десантный метеокомплект'), ('Ветровое ружье');
+    INSERT INTO meteo_plpgsql.equipment_types (name) VALUES ('Портативный метеокомплект'), ('Учебный датчик сноса');
     INSERT INTO meteo_plpgsql.base_units (name, symbol) VALUES ('метр', 'м'), ('секунда', 'с'), ('кельвин', 'K');
     INSERT INTO meteo_plpgsql.measurement_units (name, symbol)
     VALUES ('метр', 'м'), ('метр в секунду', 'м/с'), ('градус Цельсия', '°C'), ('процент', '%');
@@ -43,7 +43,7 @@ BEGIN
     VALUES (1,1,1), (2,1,1), (2,2,-1), (3,3,1);
     INSERT INTO meteo_plpgsql.parameter_types (name, measurement_unit_id)
     VALUES ('Высота метеопоста',1), ('Температура',3), ('Скорость ветра',2),
-           ('Дальность сноса пуль',1), ('Относительная влажность',4);
+           ('Дальность сноса индикатора',1), ('Относительная влажность',4);
     FOREACH person_name IN ARRAY ARRAY['Иванов И.И.', 'Петров П.П.'] LOOP
         INSERT INTO meteo_plpgsql.users (full_name, position_id)
         VALUES (person_name, CASE WHEN person_name = 'Иванов И.И.' THEN 1 ELSE 2 END)

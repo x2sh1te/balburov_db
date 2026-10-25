@@ -72,7 +72,7 @@ VALUES (2, 'Температура', 3);
 INSERT INTO parameter_types (id, name, measurement_unit_id)
 VALUES (3, 'Скорость ветра', 2);
 INSERT INTO parameter_types (id, name, measurement_unit_id)
-VALUES (4, 'Дальность сноса пуль', 1);
+VALUES (4, 'Дальность сноса индикатора', 1);
 
 ALTER TABLE parameters ADD COLUMN parameter_type_id INTEGER;
 ALTER TABLE parameters ADD COLUMN measurement_date DATE;
