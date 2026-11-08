@@ -1,5 +1,13 @@
 DO $$
 BEGIN
+    CREATE OR REPLACE FUNCTION public.format_temperature_deviation(p_value integer)
+    RETURNS integer
+    LANGUAGE sql
+    IMMUTABLE
+    AS $format$
+        SELECT CASE WHEN p_value < 0 THEN abs(p_value) + 50 ELSE p_value END;
+    $format$;
+
     CREATE OR REPLACE PROCEDURE public.calculation(
         p meteo_plpgsql.input_parameters,
         p_equipment_id integer
@@ -22,6 +30,16 @@ BEGIN
         wind_input numeric;            -- приземная скорость или дальность сноса
         wind_threshold integer;        -- порог обнуления ветра
         speed_headers integer[];       -- заголовки таблицы 3
+        dmk_threshold CONSTANT integer := 3;
+        vr_threshold CONSTANT integer := 40;
+        full_circle CONSTANT integer := 60;
+        reference_pressure CONSTANT numeric := meteo_plpgsql.get_constant('reference_pressure');
+        reference_temperature CONSTANT numeric := meteo_plpgsql.get_constant('reference_temperature');
+        lower_input integer;
+        upper_input integer;
+        speed_values integer[];
+        lower_speed integer;
+        upper_speed integer;
         speed_index integer;           -- позиция входного значения в массиве
         mean_speed integer;            -- скорость среднего ветра
         mean_direction numeric;        -- направление в больших делениях угломера
@@ -31,12 +49,12 @@ BEGIN
             speed_type := 6;
             direction_type := 7;
             wind_input := p.wind_speed;
-            wind_threshold := 3;
+            wind_threshold := dmk_threshold;
         ELSIF p_equipment_id = 2 THEN
             speed_type := 4;
             direction_type := 5;
             wind_input := p.distance;
-            wind_threshold := 40;
+            wind_threshold := vr_threshold;
         ELSE
             RAISE EXCEPTION 'Укажите тип оборудования: 1 (ДМК) или 2 (ВР)';
         END IF;
@@ -52,13 +70,20 @@ BEGIN
             JOIN public.calc_headers AS ch ON ch.id = t.header_id
             WHERE t.id = speed_type;
 
-            speed_index := array_position(
-                speed_headers, trunc(wind_input)::integer
-            );
+            -- ищем соседние столбцы для линейной интерполяции
+            SELECT max(value) INTO lower_input
+            FROM unnest(speed_headers) AS headers(value)
+            WHERE value <= wind_input;
 
-            IF wind_input <> trunc(wind_input) OR speed_index IS NULL THEN
-                RAISE EXCEPTION 'В таблице 3 нет столбца для значения %', wind_input;
+            SELECT min(value) INTO upper_input
+            FROM unnest(speed_headers) AS headers(value)
+            WHERE value >= wind_input;
+
+            IF lower_input IS NULL OR upper_input IS NULL THEN
+                RAISE EXCEPTION 'Значение % вне диапазона таблицы 3', wind_input;
             END IF;
+
+            speed_index := array_position(speed_headers, lower_input);
         END IF;
 
         -- получаем виртуальную поправку из существующей интерполяции
@@ -67,8 +92,8 @@ BEGIN
             meteo_plpgsql.get_interpolation_points(p.temperature)
         );
 
-        -- делим величину отклонения на десятки и единицы для таьлицы 2
-        ground_deviation := round(p.temperature + virtual_correction - 15.9);
+        -- делим величину отклонения на десятки и единицы для таблицы 2
+        ground_deviation := round(p.temperature + virtual_correction - reference_temperature);
         deviation_size := abs(ground_deviation);
         tens := (deviation_size / 10) * 10;
         units := deviation_size % 10;
@@ -107,7 +132,7 @@ BEGIN
             WHERE c.height_id = current_height.id
               AND c.type_id = temperature_type;
 
-            --  складываем поправки десятков и единиц если прочерк то будет  NULL
+            -- складываем поправки десятков и единиц, прочерк даёт NULL
             mean_deviation := 0;
 
             IF tens > 0 THEN
@@ -120,18 +145,29 @@ BEGIN
                     + temperature_values[array_position(temperature_headers, units)];
             END IF;
 
-            --  если скорость и направление ниже порога то они равно нулю
+            -- ниже порога скорость и направление равны нулю
             IF wind_input < wind_threshold THEN
                 mean_speed := 0;
                 mean_direction := 0;
             ELSE
-                SELECT c.row_values[speed_index] INTO mean_speed
+                SELECT c.row_values INTO speed_values
                 FROM public.calc_correction AS c
                 WHERE c.height_id = current_height.id
                   AND c.type_id = speed_type;
 
+                lower_speed := speed_values[speed_index];
+                upper_speed := speed_values[array_position(speed_headers, upper_input)];
+
+                IF lower_input = upper_input THEN
+                    mean_speed := lower_speed;
+                ELSE
+                    mean_speed := round(lower_speed
+                        + (wind_input - lower_input) * (upper_speed - lower_speed)
+                          / (upper_input - lower_input));
+                END IF;
+
                 -- прибавляем одну поправку направления на высоту
-                SELECT mod(p.wind_direction + c.row_values[1], 60)
+                SELECT mod(p.wind_direction + c.row_values[1], full_circle)
                 INTO mean_direction
                 FROM public.calc_correction AS c
                 WHERE c.height_id = current_height.id
@@ -142,7 +178,7 @@ BEGIN
             INSERT INTO pg_temp.calculation_result
                 (height, delta_h0, delta_t0_mp, delta_ty, wind_speed, wind_direction)
             VALUES
-                (current_height.height, p.pressure - 750, ground_deviation,
+                (current_height.height, p.pressure - reference_pressure, ground_deviation,
                  mean_deviation, mean_speed, mean_direction);
         END LOOP;
     END;
