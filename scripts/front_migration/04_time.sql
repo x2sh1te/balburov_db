@@ -1,4 +1,4 @@
--- Справочник времени.
+-- Справочник времени
 DO $$
 BEGIN
     CREATE TABLE IF NOT EXISTS dim_time (
@@ -13,7 +13,7 @@ BEGIN
 END;
 $$;
 
--- Одна строка на месяц.
+-- Одна строка на месяц
 WITH months AS (
     SELECT month_start,
            EXTRACT(YEAR FROM month_start)::integer AS year,
